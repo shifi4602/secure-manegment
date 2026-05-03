@@ -1,0 +1,282 @@
+from __future__ import annotations
+import re
+from calendar import monthrange
+from datetime import date, time, timedelta
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+
+from src.app.base_parser import BaseParser
+from src.domain.models import (
+    AttendanceReport, DayType, HourBreakdown,
+    ReportSummary, ReportType, ShiftTime, WorkDay,
+)
+
+_DATE_RE = re.compile(r"(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})")
+_TIME_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+
+_DAY_NAMES = {"ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"}
+
+_HEB_WEEKDAY: dict[str, int] = {
+    "ראשון": 6, "שני": 0, "שלישי": 1, "רביעי": 2,
+    "חמישי": 3, "שישי": 4, "שבת": 5,
+}
+
+
+def _parse_dec(s: str) -> Decimal:
+    try:
+        return Decimal(re.sub(r"[^\d.]", "", s))
+    except InvalidOperation:
+        return Decimal("0")
+
+
+class TypeAParser(BaseParser):
+    """
+    Parses Type A reports (נשר כח אדם).
+
+    Column order (RTL physical, read right-to-left on the page):
+      תאריך | יום | מקום עבודה | כניסה | יציאה | הפסקה | סה"כ | 100% | 125% | 150% | שבת
+
+    Strategy:
+    1. Try pdfplumber structured table extraction (best for digital PDFs).
+    2. Fall back to regex-based line parsing on the raw OCR text.
+    """
+
+    def can_parse(self, report_type: ReportType) -> bool:
+        return report_type == ReportType.TYPE_A
+
+    def _report_type(self) -> ReportType:
+        return ReportType.TYPE_A
+
+    def _rows_to_days(
+        self, rows: list[list[str]], text: str, pdf_path: Path
+    ) -> list[WorkDay]:
+        raw: list[tuple[WorkDay | None, str]] = []
+        for row in rows:
+            row_str = " ".join(str(c) for c in row)
+            day = self._parse_row(row)
+            raw.append((day, row_str))
+
+        anchored = [wd for wd, _ in raw if wd and wd.date.year > 1900]
+        unanchored = [wd for wd, _ in raw if wd and wd.date.year <= 1900]
+
+        ref_month, ref_year = self._month_year(anchored)
+
+        # Gap-fill only when undated rows outnumber dated rows —
+        # that signals genuine OCR date-drop, not duplicate artefacts.
+        if ref_month and ref_year and len(unanchored) > len(anchored):
+            return self._fill_undated_rows(raw, ref_month, ref_year)
+        return anchored
+
+    # ── extraction ─────────────────────────────────────────────────────────────
+
+    def _text_to_rows(self, text: str) -> list[list[str]]:
+        rows = []
+        for line in text.splitlines():
+            has_date = bool(_DATE_RE.search(line))
+            has_day  = any(name in line for name in _DAY_NAMES)
+            has_times = len(_TIME_RE.findall(line)) >= 2
+            if has_date or (has_day and has_times):
+                rows.append(line.split())
+        return rows
+
+    # ── row parsing ────────────────────────────────────────────────────────────
+
+    def _parse_row(self, cells: list[str]) -> WorkDay | None:
+        row_str = " ".join(str(c) for c in cells)
+
+        m = _DATE_RE.search(row_str)
+        if not m:
+            # No full date — accept if the row has a day name AND ≥2 time tokens.
+            # Date will be assigned by parse() gap-filler.
+            if not any(name in row_str for name in _DAY_NAMES):
+                return None
+            if len(_TIME_RE.findall(row_str)) < 2:
+                return None
+            work_date = date(1900, 1, 1)  # placeholder
+        else:
+            day_n  = int(m.group(1))
+            mon_n  = int(m.group(2))
+            year_n = int(m.group(3))
+            if year_n < 100:
+                year_n += 2000
+
+            try:
+                work_date = date(year_n, mon_n, day_n)
+            except ValueError:
+                return None
+
+        day_type = DayType.SHABBAT if "שבת" in row_str else DayType.REGULAR
+
+        # Extract all HH:MM times
+        times = _TIME_RE.findall(row_str)
+        shift: ShiftTime | None = None
+        if len(times) >= 2:
+            entry = time(int(times[0][0]), int(times[0][1]))
+            exit_ = time(int(times[1][0]), int(times[1][1]))
+            break_mins = 30  # default; overwrite if third time found
+            if len(times) >= 3:
+                bh, bm = int(times[2][0]), int(times[2][1])
+                break_mins = bh * 60 + bm
+            shift = ShiftTime(entry=entry, exit=exit_, break_minutes=break_mins)
+
+        # Extract decimal numbers (excluding the time-like tokens)
+        float_nums: list[Decimal] = []
+        for token in row_str.split():
+            if ":" in token:
+                continue
+            try:
+                float_nums.append(Decimal(token.replace(",", "")))
+            except InvalidOperation:
+                pass
+
+        breakdown: HourBreakdown | None = None
+        if day_type == DayType.SHABBAT:
+            shab = float_nums[0] if float_nums else Decimal("0")
+            breakdown = HourBreakdown(hours_shabbat=shab)
+        elif len(float_nums) >= 5:
+            # Order from the table: total | 100% | 125% | 150% | שבת
+            breakdown = HourBreakdown(
+                hours_100=float_nums[1],
+                hours_125=float_nums[2],
+                hours_150=float_nums[3],
+                hours_shabbat=float_nums[4] if len(float_nums) > 4 else Decimal("0"),
+            )
+        elif shift:
+            # Derive breakdown from computed total hours
+            total = shift.total_hours()
+            breakdown = self._classify(total, day_type)
+
+        location = self._location(row_str)
+
+        return WorkDay(
+            date=work_date,
+            day_type=day_type,
+            shift=shift,
+            breakdown=breakdown,
+            location=location,
+        )
+
+    # ── overtime classification ────────────────────────────────────────────────
+
+    @staticmethod
+    def _classify(total: Decimal, day_type: DayType) -> HourBreakdown:
+        if day_type == DayType.SHABBAT:
+            return HourBreakdown(hours_shabbat=total)
+        h100 = min(total, Decimal("8"))
+        rem  = total - h100
+        h125 = min(rem, Decimal("1"))
+        h150 = max(rem - Decimal("1"), Decimal("0"))
+        return HourBreakdown(hours_100=h100, hours_125=h125, hours_150=h150)
+
+    # ── summary ────────────────────────────────────────────────────────────────
+
+    def _build_summary(self, days: list[WorkDay], text: str) -> ReportSummary:
+        work_days  = [d for d in days if d.shift is not None]
+        total_100  = sum(d.breakdown.hours_100     for d in days if d.breakdown)
+        total_125  = sum(d.breakdown.hours_125     for d in days if d.breakdown)
+        total_150  = sum(d.breakdown.hours_150     for d in days if d.breakdown)
+        total_shab = sum(d.breakdown.hours_shabbat for d in days if d.breakdown)
+        total_h    = total_100 + total_125 + total_150 + total_shab
+
+        bonus  = self._labelled_decimal(text, "בונוס")
+        travel = self._labelled_decimal(text, "נסיעות")
+
+        return ReportSummary(
+            total_days=len(work_days),
+            total_hours=total_h,
+            breakdown=HourBreakdown(total_100, total_125, total_150, total_shab),
+            bonus=bonus,
+            travel=travel,
+        )
+
+    # ── helpers ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _labelled_decimal(text: str, label: str) -> Decimal:
+        m = re.search(rf"{label}[\s:]+(\d+\.?\d*)", text)
+        return _parse_dec(m.group(1)) if m else Decimal("0")
+
+    @staticmethod
+    def _location(row_str: str) -> str:
+        words = re.findall(r"[\u05d0-\u05ea]{2,}", row_str)
+        for w in reversed(words):
+            if w not in _DAY_NAMES:
+                return w
+        return ""
+
+    @staticmethod
+    def _employee_name(text: str) -> str:
+        m = re.search(r'הנשר כח אדם בע["\u05f4]?מ', text)
+        return 'הנשר כח אדם בע"מ' if m else ""
+
+    # ── gap-filling for undated rows ──────────────────────────────────────────
+
+    def _fill_undated_rows(
+        self,
+        raw: list[tuple[WorkDay | None, str]],
+        ref_month: int,
+        ref_year: int,
+    ) -> list[WorkDay]:
+        """Assign dates to placeholder rows (date == 1900-01-01)."""
+        used: set[date] = {
+            wd.date for wd, _ in raw if wd and wd.date.year > 1900
+        }
+        last_date: date = date(ref_year, ref_month, 1) - timedelta(days=1)
+        result: list[WorkDay] = []
+
+        for wd, row_str in raw:
+            if wd is None:
+                continue
+            if wd.date.year > 1900:
+                last_date = max(last_date, wd.date)
+                result.append(wd)
+                continue
+            # Placeholder — find next available date with the matching weekday
+            weekday = self._find_weekday(row_str)
+            candidate = self._next_date_for_weekday(
+                weekday, last_date, ref_month, ref_year, used
+            )
+            if candidate is None:
+                continue
+            filled = WorkDay(
+                date=candidate,
+                day_type=wd.day_type,
+                shift=wd.shift,
+                breakdown=wd.breakdown,
+                location=wd.location,
+                notes=wd.notes,
+            )
+            result.append(filled)
+            used.add(candidate)
+            last_date = candidate
+
+        return sorted(result, key=lambda d: d.date)
+
+    @staticmethod
+    def _find_weekday(row_str: str) -> int | None:
+        for name, wd in _HEB_WEEKDAY.items():
+            if name in row_str:
+                return wd
+        return None
+
+    @staticmethod
+    def _next_date_for_weekday(
+        weekday: int | None,
+        after: date,
+        ref_month: int,
+        ref_year: int,
+        used: set[date],
+    ) -> date | None:
+        days_in_month = monthrange(ref_year, ref_month)[1]
+        for day_n in range(1, days_in_month + 1):
+            candidate = date(ref_year, ref_month, day_n)
+            if candidate <= after:
+                continue
+            if candidate in used:
+                continue
+            if weekday is not None and candidate.weekday() != weekday:
+                continue
+            return candidate
+        return None
+
+

@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meeting Scheduler</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #eef0ff;
+      min-height: 100vh;
+      color: #1e1b4b;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      padding: 2rem 1.5rem;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(99,102,241,0.35);
+    }
+    header h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em; }
+    header p  { margin-top: 0.4rem; opacity: 0.85; font-size: 1rem; }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 620px) { .layout { grid-template-columns: 1fr; } }
+
+    /* ── Card ── */
+    .card {
+      background: white;
+      border-radius: 1.1rem;
+      padding: 1.75rem;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+    }
+    .card-section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #6366f1;
+      margin-bottom: 0.85rem;
+    }
+
+    /* ── People toggles ── */
+    .people-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-bottom: 1.75rem;
+    }
+    .person-toggle input { display: none; }
+    .person-toggle span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.5rem 1.1rem;
+      border: 2px solid #dde0ff;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 0.92rem;
+      font-weight: 500;
+      transition: all 0.15s ease;
+      user-select: none;
+      color: #4338ca;
+      background: #f0f2ff;
+    }
+    .person-toggle span::before { content: '👤'; font-size: 0.85rem; }
+    .person-toggle input:checked + span {
+      background: #6366f1;
+      border-color: #6366f1;
+      color: white;
+      box-shadow: 0 2px 10px rgba(99,102,241,0.4);
+    }
+    .person-toggle input:checked + span::before { content: '✓'; }
+    .person-toggle span:hover { border-color: #6366f1; background: #e8eaff; }
+
+    /* ── Duration ── */
+    .duration-row {
+      display: flex;
+      gap: 0.9rem;
+      margin-bottom: 1.75rem;
+    }
+    .duration-field { flex: 1; }
+    .duration-field label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #9ca3af;
+      margin-bottom: 0.35rem;
+    }
+    .duration-field input {
+      width: 100%;
+      padding: 0.6rem 0.5rem;
+      border: 2px solid #dde0ff;
+      border-radius: 0.65rem;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #1e1b4b;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s;
+      -moz-appearance: textfield;
+    }
+    .duration-field input::-webkit-inner-spin-button,
+    .duration-field input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .duration-field input:focus { border-color: #6366f1; }
+
+    /* ── Button ── */
+    .btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border: none;
+      border-radius: 0.8rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      box-shadow: 0 4px 14px rgba(99,102,241,0.4);
+      letter-spacing: 0.01em;
+    }
+    .btn:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(99,102,241,0.45); }
+    .btn:active:not(:disabled) { transform: translateY(0); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Results card ── */
+    .results-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+      color: #a5b4fc;
+      text-align: center;
+      gap: 0.85rem;
+    }
+    .results-placeholder .icon { font-size: 3.2rem; }
+    .results-placeholder p { font-size: 0.95rem; color: #9ca3af; line-height: 1.6; }
+
+    .slots-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+    .slots-meta { font-size: 0.82rem; color: #9ca3af; margin-bottom: 1rem; }
+
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+    }
+    .badge-green { background: #dcfce7; color: #16a34a; }
+    .badge-red   { background: #fef2f2; color: #dc2626; }
+
+    .slots-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 330px;
+      overflow-y: auto;
+      padding-right: 0.2rem;
+    }
+    .slots-grid::-webkit-scrollbar { width: 4px; }
+    .slots-grid::-webkit-scrollbar-track { background: #f0f2ff; border-radius: 4px; }
+    .slots-grid::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 4px; }
+
+    .slot-chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f0fdf4;
+      border: 1.5px solid #86efac;
+      border-radius: 0.7rem;
+      padding: 0.65rem 1rem;
+      font-variant-numeric: tabular-nums;
+      transition: background 0.15s;
+    }
+    .slot-chip:hover { background: #dcfce7; }
+    .slot-chip .slot-icon { font-size: 1.15rem; }
+    .slot-chip .slot-range {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #166534;
+      letter-spacing: 0.01em;
+    }
+    .slot-chip .slot-duration {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #4ade80;
+      background: #dcfce7;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+    }
+
+    .no-slots-msg {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: #ef4444;
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+    .error-msg {
+      padding: 0.9rem 1rem;
+      background: #fef2f2;
+      border: 1.5px solid #fca5a5;
+      border-radius: 0.65rem;
+      color: #dc2626;
+      font-size: 0.9rem;
+    }
+
+    /* ── Schedule view ── */
+    .schedule-select {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 2px solid #dde0ff;
+      border-radius: 0.65rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #1e1b4b;
+      background: white;
+      outline: none;
+      cursor: pointer;
+      margin-bottom: 0.85rem;
+      transition: border-color 0.15s;
+    }
+    .schedule-select:focus { border-color: #6366f1; }
+
+    .event-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .event-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.9rem;
+      background: #f5f3ff;
+      border: 1.5px solid #c4b5fd;
+      border-radius: 0.65rem;
+      font-size: 0.91rem;
+    }
+    .event-emoji { font-size: 1.2rem; flex-shrink: 0; }
+    .event-subject { font-weight: 600; color: #1e1b4b; flex: 1; }
+    .event-time { font-variant-numeric: tabular-nums; color: #6366f1; font-weight: 700; white-space: nowrap; }
+
+    /* ── Spinner ── */
+    .spinner-wrap { display: flex; justify-content: center; padding: 3rem; }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid #e0e0ff;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📅 Meeting Scheduler</h1>
+  <p>Find open time slots that work for everyone</p>
+</header>
+
+<div class="container">
+  <div class="layout">
+
+    <!-- ── Controls card ── -->
+    <div class="card">
+      <p class="card-section-label">Attendees</p>
+      <div class="people-grid">
+        {% for person in people %}
+        <label class="person-toggle">
+          <input type="checkbox" class="person-cb" value="{{ person }}" />
+          <span>{{ person }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <p class="card-section-label">Meeting Duration</p>
+      <div class="duration-row">
+        <div class="duration-field">
+          <label>Hours</label>
+          <input type="number" id="hours" min="0" max="11" value="1" />
+        </div>
+        <div class="duration-field">
+          <label>Minutes</label>
+          <input type="number" id="minutes" min="0" max="50" step="10" value="0" />
+        </div>
+      </div>
+
+      <button class="btn" id="find-btn" onclick="findSlots()">
+        🔍 Find Available Slots
+      </button>
+
+      <p class="card-section-label" style="margin-top:1.75rem">View Person's Schedule</p>
+      <select class="schedule-select" id="schedule-person">
+        <option value="">— Select a person —</option>
+        {% for person in people %}
+        <option value="{{ person }}">{{ person }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn" style="background:linear-gradient(135deg,#8b5cf6,#a78bfa)" onclick="viewSchedule()">
+        📋 View Schedule
+      </button>
+    </div>
+
+    <!-- ── Results card ── -->
+    <div class="card" id="results-card">
+      <div class="results-placeholder" id="placeholder">
+        <div class="icon">🗓️</div>
+        <p>Select attendees and a duration,<br />then click <strong>Find Available Slots</strong></p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  async function findSlots() {
+    const people = [...document.querySelectorAll('.person-cb:checked')].map(el => el.value);
+    const hours   = parseInt(document.getElementById('hours').value)   || 0;
+    const minutes = parseInt(document.getElementById('minutes').value) || 0;
+
+    if (people.length === 0) { showError('Please select at least one attendee.'); return; }
+    if (hours === 0 && minutes === 0) { showError('Please enter a duration greater than 0.'); return; }
+
+    const btn = document.getElementById('find-btn');
+    btn.disabled = true;
+    showLoading();
+
+    try {
+      const res = await fetch('/find-slots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ people, hours, minutes }),
+      });
+      const json = await res.json();
+      if (!res.ok) { showError(json.error || `Server error ${res.status}`); return; }
+      showResults(json.slots, people, hours, minutes);
+    } catch (err) {
+      showError('Could not reach the server: ' + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function showLoading() {
+    document.getElementById('results-card').innerHTML =
+      '<div class="spinner-wrap"><div class="spinner"></div></div>';
+  }
+
+  function showError(msg) {
+    document.getElementById('results-card').innerHTML =
+      `<div class="error-msg">⚠️ ${msg}</div>`;
+  }
+
+  const EMOJI_MAP = [
+    { words: ['meeting'],            emoji: '🤝' },
+    { words: ['lunch', 'dinner', 'breakfast', 'food'], emoji: '🍽️' },
+    { words: ['call', 'phone'],      emoji: '📞' },
+    { words: ['yoga', 'gym', 'sport', 'exercise', 'workout'], emoji: '🧘' },
+    { words: ['review', 'retro'],    emoji: '🔍' },
+    { words: ['siesta', 'break', 'rest', 'nap'], emoji: '💤' },
+    { words: ['interview'],          emoji: '💼' },
+    { words: ['training', 'workshop', 'study'], emoji: '📚' },
+  ];
+
+  function eventEmoji(subject) {
+    const lower = subject.toLowerCase();
+    for (const { words, emoji } of EMOJI_MAP) {
+      if (words.some(w => lower.includes(w))) return emoji;
+    }
+    return '📌';
+  }
+
+  async function viewSchedule() {
+    const person = document.getElementById('schedule-person').value;
+    if (!person) { showError('Please select a person to view their schedule.'); return; }
+
+    showLoading();
+    try {
+      const res = await fetch(`/person-events?person=${encodeURIComponent(person)}`);
+      const json = await res.json();
+      if (!res.ok) { showError(json.error || `Server error ${res.status}`); return; }
+      showSchedule(person, json.events);
+    } catch (err) {
+      showError('Could not reach the server: ' + err.message);
+    }
+  }
+
+  function showSchedule(person, events) {
+    const badge = `<span class="badge badge-green">${events.length} event${events.length !== 1 ? 's' : ''}</span>`;
+    let html = `
+      <div class="slots-header">
+        <p class="card-section-label" style="margin:0">📋 ${person}'s Schedule</p>
+        ${badge}
+      </div>
+      <p class="slots-meta">All tasks for today</p>`;
+
+    if (events.length === 0) {
+      html += '<div class="no-slots-msg">😊 No events scheduled.</div>';
+    } else {
+      html += '<div class="event-list">' +
+        events.map(e => `
+          <div class="event-item">
+            <span class="event-emoji">${eventEmoji(e.subject)}</span>
+            <span class="event-subject">${e.subject}</span>
+            <span class="event-time">${e.start} – ${e.end}</span>
+          </div>`).join('') +
+        '</div>';
+    }
+    document.getElementById('results-card').innerHTML = html;
+  }
+
+  function showResults(slots, people, hours, minutes) {
+    const dur  = [hours ? `${hours}h` : '', minutes ? `${minutes}m` : ''].filter(Boolean).join(' ');
+    const who  = people.join(' &amp; ');
+    const badge = slots.length > 0
+      ? `<span class="badge badge-green">${slots.length} slot${slots.length !== 1 ? 's' : ''}</span>`
+      : `<span class="badge badge-red">0 slots</span>`;
+
+    let html = `
+      <div class="slots-header">
+        <p class="card-section-label" style="margin:0">Free Time Slots</p>
+        ${badge}
+      </div>
+      <p class="slots-meta">${dur} meeting &middot; ${who}</p>`;
+
+    if (slots.length === 0) {
+      html += '<div class="no-slots-msg">😔 No available slots found for this combination.</div>';
+    } else {
+      html += '<div class="slots-grid">' +
+        slots.map(s => {
+          const [sh, sm] = s.start.split(':').map(Number);
+          const [eh, em] = s.end.split(':').map(Number);
+          const durMin = (eh * 60 + em) - (sh * 60 + sm);
+          const durLabel = durMin >= 60
+            ? (durMin % 60 === 0 ? `${durMin/60}h` : `${Math.floor(durMin/60)}h ${durMin%60}m`)
+            : `${durMin}m`;
+          return `<div class="slot-chip">
+            <span class="slot-icon">🟢</span>
+            <span class="slot-range">${s.start} – ${s.end}</span>
+            <span class="slot-duration">${durLabel} free</span>
+          </div>`;
+        }).join('') +
+        '</div>';
+    }
+
+    document.getElementById('results-card').innerHTML = html;
+  }
+</script>
+
+</body>
+</html>
