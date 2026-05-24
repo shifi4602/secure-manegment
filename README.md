@@ -1,15 +1,14 @@
-# 🔐 Secure Management Platform — Monorepo
+# 🔐 Secure Management Platform
 
-A monorepo containing two independent Python applications focused on security and productivity.
+A Python application focused on security and private messaging.
 
 ---
 
-## 📦 Applications Overview
+## 📦 Application Overview
 
 | App | Description | Port |
 |-----|-------------|------|
 | 💬 [`apps/messenger`](apps/messenger/) | Secure encrypted messaging REST API (FastAPI + SQLite) | 8000 |
-| 📅 [`apps/calendar`](apps/calendar/) | Meeting-slot finder with Flask web UI | 5000 |
 
 ---
 
@@ -106,89 +105,12 @@ pytest tests/ -v
 
 ---
 
-## 📅 Calendar App
-
-A **meeting-slot finder** that reads from a shared CSV calendar and identifies time windows when all requested attendees are free.
-
-Available in two modes:
-- 🌐 **Web UI** — Flask app served on port 5000
-- 🖥️ **CLI** — run directly from the terminal
-
-### 📁 Project Structure
-
-```
-apps/calendar/
-├── io_comp/
-│   ├── app.py       # 🖥️  CLI entry point
-│   ├── calendar.py  # 📅 Core calendar logic
-│   ├── event.py     # 📌 Event data model
-│   ├── ui.py        # 🌐 Flask web UI
-│   └── templates/
-│       └── index.html
-├── resources/
-│   └── calendar.csv # 📊 Shared calendar data
-├── tests/
-│   └── test_app.py  # 🧪 Pytest tests
-├── setup.py
-└── requirements.txt
-```
-
-### 🔍 Core Function
-
-```python
-from typing import List
-from datetime import time, timedelta
-
-def find_available_slots(person_list: List[str], event_duration: timedelta) -> List[time]:
-    """
-    Find all available time slots for a meeting with the given people and duration.
-
-    Args:
-        person_list: List of person names who should attend the meeting
-        event_duration: Duration of the desired meeting
-
-    Returns:
-        List of start times when all persons are available
-    """
-```
-
-### ⚙️ Tech Stack
-
-- **Flask** — lightweight web framework
-- **Python datetime** — time & slot computation
-- **CSV** — calendar data source
-
-### 🚀 Quick Start
-
-```bash
-cd apps/calendar
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # macOS/Linux
-pip install -r requirements.txt
-pip install -e .
-python -m io_comp.ui          # 🌐 Web UI on port 5000
-# or:
-python -m io_comp.app         # 🖥️  CLI mode
-```
-
-### 🧪 Running Tests
-
-```bash
-cd apps/calendar
-pytest
-pytest -v   # verbose output
-```
-
----
-
-## 🗂️ Monorepo Structure
+## �️ Project Structure
 
 ```
 secure-management-platform/
 ├── apps/
-│   ├── messenger/   # 💬 Secure messaging API (FastAPI + SQLite)
-│   └── calendar/    # 📅 Meeting slot finder (Flask)
+│   └── messenger/   # 💬 Secure messaging API (FastAPI + SQLite)
 └── README.md
 ```
 
