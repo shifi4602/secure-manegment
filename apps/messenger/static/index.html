@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secure Messenger</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d1117;
+      --surface:    #161b22;
+      --surface2:   #21262d;
+      --border:     #30363d;
+      --text:       #e6edf3;
+      --muted:      #8b949e;
+      --accent:     #58a6ff;
+      --sent:       #1d4ed8;
+      --green:      #3fb950;
+      --red:        #f85149;
+      --yellow:     #d29922;
+      --r:          12px;
+      --r-sm:       8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Login ──────────────────────────────────────────── */
+    #login-screen {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse 60% 40% at 50% 0%, #1d4ed825 0%, transparent 70%);
+    }
+
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 44px 40px 36px;
+      width: 390px;
+      box-shadow: 0 32px 80px #00000066;
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .login-logo .ico { font-size: 44px; display: block; margin-bottom: 12px; }
+    .login-logo h1  { font-size: 22px; font-weight: 700; }
+    .login-logo p   { font-size: 13px; color: var(--muted); margin-top: 5px; }
+
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus { border-color: var(--accent); }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--accent);
+      color: #0d1117;
+      font-weight: 700;
+      font-size: 14px;
+      border: none;
+      border-radius: var(--r-sm);
+      padding: 12px;
+      cursor: pointer;
+      margin-top: 6px;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn-primary:hover  { opacity: .88; }
+    .btn-primary:active { transform: scale(.98); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+    .login-error {
+      color: var(--red);
+      font-size: 13px;
+      text-align: center;
+      margin-top: 12px;
+      min-height: 18px;
+    }
+
+    .tabs {
+      display: flex;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 3px;
+      margin-bottom: 24px;
+    }
+    .tab {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-radius: calc(var(--r-sm) - 2px);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .tab.active {
+      background: var(--surface2);
+      color: var(--text);
+    }
+
+    .e2e-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Chat ───────────────────────────────────────────── */
+    #chat-screen {
+      display: none;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-top {
+      padding: 18px 16px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-body {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .label-xs {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .sidebar-body input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .sidebar-body input:focus { border-color: var(--accent); }
+
+    .btn-sm {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-sm:hover { background: var(--border); }
+
+    .sidebar-footer {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-signout {
+      margin-left: auto;
+      flex-shrink: 0;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--muted);
+      font-size: 18px;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+      line-height: 1;
+    }
+    .btn-signout:hover { background: var(--surface2); color: var(--red); border-color: var(--red); }
+    .btn-signout title { display: none; }
+
+    .user-chip { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); color: #0d1117;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px; flex-shrink: 0;
+    }
+    .user-chip .uname { font-size: 13px; font-weight: 600; }
+    .user-chip .role  { font-size: 11px; color: var(--muted); }
+
+    /* Main area */
+    .chat-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .chat-header {
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .rec-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--surface2); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; flex-shrink: 0;
+    }
+
+    .rec-info .rec-name { font-size: 15px; font-weight: 600; }
+    .rec-info .rec-sub  {
+      font-size: 12px; color: var(--muted);
+      display: flex; align-items: center; gap: 5px; margin-top: 2px;
+    }
+
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--yellow); transition: background .3s;
+      flex-shrink: 0;
+    }
+    .dot.live { background: var(--green); }
+    .dot.dead { background: var(--red); }
+
+    .enc-pill {
+      margin-left: auto;
+      background: #3fb95018; border: 1px solid #3fb95035;
+      color: var(--green);
+      border-radius: 20px; padding: 3px 11px;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; gap: 5px;
+      white-space: nowrap;
+    }
+
+    /* Messages */
+    .msgs {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .msgs::-webkit-scrollbar { width: 4px; }
+    .msgs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 14px;
+      gap: 10px;
+      pointer-events: none;
+      user-select: none;
+    }
+    .empty .eico { font-size: 42px; }
+
+    .mrow {
+      display: flex;
+      flex-direction: column;
+      max-width: 68%;
+      animation: pop .18s ease;
+    }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .mrow.sent     { align-self: flex-end; align-items: flex-end; }
+    .mrow.received { align-self: flex-start; align-items: flex-start; }
+
+    .mrow + .mrow { margin-top: 2px; }
+    .mrow.sent + .mrow.received,
+    .mrow.received + .mrow.sent { margin-top: 12px; }
+
+    .slabel {
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 3px; padding: 0 4px;
+    }
+
+    .bubble {
+      padding: 9px 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.55;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .sent .bubble     { background: var(--sent); color: #fff; border-bottom-right-radius: 4px; }
+    .received .bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
+
+    .ts {
+      font-size: 10px; color: var(--muted);
+      margin-top: 3px; padding: 0 4px;
+    }
+
+    /* Input bar */
+    .input-bar {
+      padding: 14px 18px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .input-bar textarea {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--text);
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+      max-height: 120px;
+      transition: border-color .15s;
+    }
+    .input-bar textarea:focus { border-color: var(--accent); }
+    .input-bar textarea::placeholder { color: var(--muted); }
+
+    .send-btn {
+      width: 42px; height: 42px; border-radius: 50%;
+      background: var(--accent); border: none;
+      color: #0d1117;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .send-btn:hover  { opacity: .88; }
+    .send-btn:active { transform: scale(.9); }
+    .send-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Multi-recipient chips ──────────────────────────── */
+    .recipients-chips {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      min-height: 36px; padding: 6px 8px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+    }
+    .chip {
+      display: flex; align-items: center; gap: 4px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 3px 6px 3px 10px;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      transition: background .15s, border-color .15s;
+      user-select: none;
+    }
+    .chip.active { border-color: var(--accent); color: var(--accent); }
+    .chip:hover  { background: var(--border); }
+    .chip-x {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 16px; line-height: 1;
+      padding: 0 2px; transition: color .1s;
+    }
+    .chip-x:hover { color: var(--red); }
+    .add-row { display: flex; gap: 6px; margin-top: 8px; }
+    .add-row input {
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--text);
+      padding: 8px 12px; font-size: 13px; outline: none;
+      transition: border-color .15s;
+    }
+    .add-row input:focus { border-color: var(--accent); }
+    .btn-icon {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--text);
+      font-size: 20px; font-weight: 300; padding: 4px 12px;
+      cursor: pointer; line-height: 1; transition: background .15s;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover { background: var(--border); }
+  </style>
+</head>
+<body>
+
+<!-- ── Login ─────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="ico">🔐</span>
+      <h1>Secure Messenger</h1>
+      <p>End-to-end encrypted &nbsp;·&nbsp; Real-time</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tab-signin"   onclick="setMode('signin')">Sign In</button>
+      <button class="tab"        id="tab-register" onclick="setMode('register')">New Account</button>
+    </div>
+
+    <div class="field">
+      <label>Username</label>
+      <input id="l-user" type="text" placeholder="Username" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="l-pass" type="password" placeholder="Password (6+ chars)" autocomplete="new-password">
+    </div>
+    <div class="field" id="confirm-field" style="display:none">
+      <label>Confirm Password</label>
+      <input id="l-confirm" type="password" placeholder="Re-enter password">
+    </div>
+    <div class="field">
+      <label>Chat with (optional)</label>
+      <input id="l-rec" type="text" placeholder="Recipient's username">
+    </div>
+
+    <button class="btn-primary" id="l-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="l-err"></div>
+    <div class="e2e-badge">🔒&nbsp; Messages encrypted with AES-256-GCM</div>
+  </div>
+</div>
+
+<!-- ── Chat ──────────────────────────────────────────────── -->
+<div id="chat-screen">
+
+  <aside class="sidebar">
+    <div class="sidebar-top">🔐 Secure Messenger</div>
+    <div class="sidebar-body">
+      <div>
+        <div class="label-xs">Recipients</div>
+        <div class="recipients-chips" id="recipients-chips"></div>
+        <div class="add-row">
+          <input id="s-rec" type="text" placeholder="Add username…"
+            onkeydown="if(event.key==='Enter'){addRecipient();event.preventDefault();}">
+          <button class="btn-icon" onclick="addRecipient()" title="Add recipient">+</button>
+        </div>
+      </div>
+      <button class="btn-sm" onclick="sendToAll()">📢 Send to All Users</button>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-chip">
+        <div class="avatar" id="my-av"></div>
+        <div>
+          <div class="uname" id="my-name"></div>
+          <div class="role">Signed in</div>
+        </div>
+        <button class="btn-signout" onclick="signOut()" title="Switch User">↩</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="chat-main">
+    <div class="chat-header">
+      <div class="rec-avatar">👤</div>
+      <div class="rec-info">
+        <div class="rec-name" id="h-rec">—</div>
+        <div class="rec-sub">
+          <span class="dot" id="status-dot"></span>
+          <span id="status-txt">Connecting…</span>
+        </div>
+      </div>
+      <div class="enc-pill">🔒 Encrypted</div>
+    </div>
+
+    <div class="msgs" id="msgs">
+      <div class="empty" id="empty">
+        <span class="eico">💬</span>
+        <span>No messages yet — say hello!</span>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <textarea id="msg-in" rows="1" placeholder="Write a message…"
+        onkeydown="handleKey(event)" oninput="resize(this)"></textarea>
+      <button class="send-btn" id="send-btn" onclick="sendMsg()" title="Send (Enter)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  let token = null, me = null, recipients = [], activeRecipient = null, sse = null;
+  let loginMode = 'signin';
+  let historySeq = 0;
+
+  // ── Utilities ─────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+
+  function timeFmt(iso) {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function setStatus(cls, txt) {
+    $('status-dot').className = 'dot ' + cls;
+    $('status-txt').textContent = txt;
+  }
+
+  // ── Mode toggle ────────────────────────────────────────
+  function setMode(m) {
+    loginMode = m;
+    $('tab-signin').classList.toggle('active', m === 'signin');
+    $('tab-register').classList.toggle('active', m === 'register');
+    $('confirm-field').style.display = m === 'register' ? '' : 'none';
+    $('l-btn').textContent = m === 'register' ? 'Create Account' : 'Sign In';
+    $('l-err').textContent = '';
+  }
+
+  // ── Login / Register ───────────────────────────────────
+  async function doLogin() {
+    const user    = $('l-user').value.trim();
+    const pass    = $('l-pass').value;
+    const confirm = $('l-confirm').value;
+    const rec     = $('l-rec').value.trim();
+
+    $('l-err').textContent = '';
+    if (!user || !pass) { $('l-err').textContent = 'Username and password are required.'; return; }
+
+    if (loginMode === 'register') {
+      if (pass !== confirm) { $('l-err').textContent = 'Passwords do not match.'; return; }
+
+      $('l-btn').disabled = true;
+      $('l-btn').textContent = 'Creating account…';
+
+      const regRes = await fetch('/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, password: pass }),
+      });
+      if (!regRes.ok) {
+        const d = await regRes.json().catch(() => ({}));
+        $('l-err').textContent = d.detail || 'Registration failed.';
+        $('l-btn').disabled = false;
+        $('l-btn').textContent = 'Create Account';
+        return;
+      }
+    } else {
+      $('l-btn').disabled = true;
+      $('l-btn').textContent = 'Signing in…';
+    }
+
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pass }),
+    });
+
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      $('l-err').textContent = d.detail || 'Login failed.';
+      $('l-btn').disabled = false;
+      $('l-btn').textContent = loginMode === 'register' ? 'Create Account' : 'Sign In';
+      return;
+    }
+
+    token = (await res.json()).access_token;
+    me = user;
+    recipients = [];
+    activeRecipient = null;
+    if (rec) { recipients = [rec]; activeRecipient = rec; }
+    enterChat();
+  }
+
+  // ── Enter chat ─────────────────────────────────────────
+  function enterChat() {
+    $('login-screen').style.display = 'none';
+    const cs = $('chat-screen');
+    cs.style.display = 'flex';
+
+    $('my-av').textContent   = me[0].toUpperCase();
+    $('my-name').textContent = me;
+
+    renderRecipients();
+    loadHistory();
+    connectSSE();
+  }
+
+  // ── Recipients management ──────────────────────────────
+  function renderRecipients() {
+    const container = $('recipients-chips');
+    container.innerHTML = '';
+    if (recipients.length === 0) {
+      const ph = document.createElement('span');
+      ph.style.cssText = 'font-size:12px;color:var(--muted);padding:4px 2px';
+      ph.textContent = 'No recipients yet';
+      container.appendChild(ph);
+      $('h-rec').textContent = '—';
+      return;
+    }
+    recipients.forEach(r => {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (r === activeRecipient ? ' active' : '');
+      chip.onclick = () => setActive(r);
+
+      const name = document.createElement('span');
+      name.textContent = r;
+
+      const x = document.createElement('button');
+      x.className = 'chip-x';
+      x.title = 'Remove';
+      x.textContent = '×';
+      x.onclick = e => { e.stopPropagation(); removeRecipient(r); };
+
+      chip.appendChild(name);
+      chip.appendChild(x);
+      container.appendChild(chip);
+    });
+    $('h-rec').textContent = activeRecipient
+      ? (recipients.length > 1 ? `${activeRecipient} (+${recipients.length - 1} more)` : activeRecipient)
+      : '—';
+  }
+
+  function addRecipient(username) {
+    const name = (username || $('s-rec').value.trim()).trim();
+    $('s-rec').value = '';
+    if (!name || name === me || recipients.includes(name)) return;
+    recipients.push(name);
+    if (!activeRecipient) {
+      activeRecipient = name;
+      loadHistory();
+    }
+    renderRecipients();
+  }
+
+  function removeRecipient(username) {
+    recipients = recipients.filter(r => r !== username);
+    if (activeRecipient === username) {
+      activeRecipient = recipients[0] || null;
+      loadHistory();
+    }
+    renderRecipients();
+  }
+
+  function setActive(username) {
+    activeRecipient = username;
+    renderRecipients();
+    clearMessages();
+    loadHistory();
+  }
+
+  async function sendToAll() {
+    const res = await fetch('/users', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return;
+    const users = await res.json();
+    let changed = false;
+    users.forEach(u => {
+      if (!recipients.includes(u)) {
+        recipients.push(u);
+        if (!activeRecipient) { activeRecipient = u; changed = true; }
+      }
+    });
+    if (changed) loadHistory();
+    renderRecipients();
+  }
+
+  // ── History ────────────────────────────────────────────
+  async function loadHistory() {
+    clearMessages();
+    if (!activeRecipient) return;
+    const seq = ++historySeq;
+    const target = activeRecipient;
+    const res = await fetch('/messages', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (seq !== historySeq) return;  // stale — a newer switch happened
+    if (!res.ok) return;
+    const all = await res.json();
+    if (seq !== historySeq) return;  // stale — guard after json parse too
+    all
+      .filter(m =>
+        (m.sender === me && m.recipient === target) ||
+        (m.sender === target && m.recipient === me)
+      )
+      .forEach(m => addBubble(m, false));
+    scrollBot();
+  }
+
+  // ── SSE ────────────────────────────────────────────────
+  function connectSSE() {
+    if (sse) sse.close();
+    setStatus('', 'Connecting…');
+
+    sse = new EventSource(`/stream?token=${encodeURIComponent(token)}`);
+
+    sse.onopen  = () => setStatus('live', 'Live');
+    sse.onerror = () => setStatus('dead', 'Recting…');
+
+    sse.onmessage = e => {
+      try {
+        const m = JSON.parse(e.data);
+        if (m.sender === activeRecipient ||
+            (m.sender === me && m.recipient === activeRecipient)) {
+          addBubble(m, true);
+          scrollBot();
+        }
+      } catch {}
+    };
+  }
+
+  // ── Send ───────────────────────────────────────────────
+  async function sendMsg() {
+    const ta = $('msg-in');
+    const content = ta.value.trim();
+    if (!content || recipients.length === 0) return;
+
+    $('send-btn').disabled = true;
+    ta.value = '';
+    ta.style.height = '';
+
+    for (const rec of recipients) {
+      const res = await fetch('/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ recipient: rec, content }),
+      });
+      if (res.ok && rec === activeRecipient) {
+        addBubble(await res.json(), true);
+        scrollBot();
+      } else if (res.ok) {
+        await res.json();
+      }
+    }
+
+    $('send-btn').disabled = false;
+    ta.focus();
+  }
+
+  // ── Bubble ─────────────────────────────────────────────
+  function addBubble(msg, animate) {
+    const empty = $('empty');
+    if (empty) empty.remove();
+
+    const isSent = msg.sender === me;
+    const row = document.createElement('div');
+    row.className = 'mrow ' + (isSent ? 'sent' : 'received');
+    if (!animate) row.style.animation = 'none';
+
+    const label = document.createElement('div');
+    label.className = 'slabel';
+    label.textContent = isSent ? 'You' : msg.sender;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = msg.content;
+
+    const ts = document.createElement('div');
+    ts.className = 'ts';
+    ts.textContent = timeFmt(msg.created_at);
+
+    row.append(label, bubble, ts);
+    $('msgs').appendChild(row);
+  }
+
+  // ── Helpers ────────────────────────────────────────────
+  function clearMessages() {
+    $('msgs').innerHTML = '<div class="empty" id="empty"><span class="eico">💬</span><span>No messages yet — say hello!</span></div>';
+  }
+
+  function scrollBot() {
+    const m = $('msgs');
+    m.scrollTop = m.scrollHeight;
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+  }
+
+  function resize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  // ── Sign out / Switch User ──────────────────────────────
+  function signOut() {
+    if (sse) { sse.close(); sse = null; }
+    token = null; me = null; recipients = []; activeRecipient = null; historySeq = 0;
+
+    // Reset login form
+    $('l-user').value = '';
+    $('l-pass').value = '';
+    $('l-confirm').value = '';
+    $('l-rec').value = '';
+    $('l-err').textContent = '';
+    $('l-btn').disabled = false;
+    setMode('signin');
+
+    $('chat-screen').style.display = 'none';
+    $('login-screen').style.display = '';
+    $('l-user').focus();
+  }
+
+  // Enter key on login fields
+  ['l-pass', 'l-rec'].forEach(id => {
+    $(id).addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  });
+</script>
+</body>
+</html>
