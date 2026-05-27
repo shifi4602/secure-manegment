@@ -203,7 +203,7 @@ async def stream_events(
         try:
             while True:
                 data = await queue.get()
-                yield {"data": data}
+                yield {"event": "message", "data": data}
         finally:
             broadcaster.unsubscribe(username, queue)
 

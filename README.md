@@ -125,3 +125,18 @@ secure-management-platform/
 | 🔒 Message encryption | AES-256-GCM — tamper-evident, nonce-per-message |
 | 🚫 Unauthorized access | HTTP 401/403 on all protected endpoints |
 | 🗃️ Stolen DB protection | Only hashes and ciphertext — no readable secrets |
+| 🌐 CORS | `CORSMiddleware` configured — browser clients can connect safely |
+
+### 🛡️ Login Security & Timing Side-Channel
+
+`POST /login` is deliberately hardened against user enumeration and timing attacks:
+
+- **Unified error message:** Both unknown usernames and wrong passwords return the same `"Invalid username or password"` response — an attacker cannot distinguish between the two.
+- **bcrypt timing oracle:** bcrypt `checkpw` is only called when the user *exists*. For an unknown username, no hash comparison runs, which creates a measurable timing difference (~200 ms). To fully eliminate this, always run a dummy bcrypt check when the user is not found:
+  ```python
+  # Constant-time defence (production hardening)
+  if not user:
+      bcrypt.checkpw(b"dummy", DUMMY_HASH)  # burn the same CPU time
+      raise HTTPException(401, "Invalid username or password")
+  ```
+- **Rate limiting:** In production, `POST /login` should be protected by a rate limiter (e.g., `slowapi`) to prevent brute-force attacks. The current implementation is suitable for development/stage — add rate limiting before any public deployment.

@@ -368,3 +368,117 @@ class TestMultiRecipient:
         msg = r.json()
         assert msg["sender"] == "alice"
         assert msg["recipient"] == "alice"
+
+
+# ===========================================================================
+# 6. Broadcaster / SSE tests
+# ===========================================================================
+
+import asyncio
+from server.broadcaster import Broadcaster
+
+
+class TestBroadcaster:
+
+    def test_subscribe_returns_queue(self):
+        """subscribe() must return an asyncio.Queue."""
+        async def run():
+            b = Broadcaster()
+            q = b.subscribe("alice")
+            assert isinstance(q, asyncio.Queue)
+            b.unsubscribe("alice", q)
+        asyncio.run(run())
+
+    def test_broadcast_delivers_message_to_subscriber(self):
+        """A broadcast reaches the subscribed queue."""
+        async def run():
+            b = Broadcaster()
+            q = b.subscribe("alice")
+            b.broadcast("alice", "hello")
+            msg = await asyncio.wait_for(q.get(), timeout=1.0)
+            assert msg == "hello"
+            b.unsubscribe("alice", q)
+        asyncio.run(run())
+
+    def test_broadcast_delivers_to_multiple_subscribers(self):
+        """Two connections for the same user both receive the message."""
+        async def run():
+            b = Broadcaster()
+            q1 = b.subscribe("alice")
+            q2 = b.subscribe("alice")
+            b.broadcast("alice", "ping")
+            msg1 = await asyncio.wait_for(q1.get(), timeout=1.0)
+            msg2 = await asyncio.wait_for(q2.get(), timeout=1.0)
+            assert msg1 == msg2 == "ping"
+            b.unsubscribe("alice", q1)
+            b.unsubscribe("alice", q2)
+        asyncio.run(run())
+
+    def test_broadcast_only_reaches_intended_recipient(self):
+        """A message to alice does not appear in bob's queue."""
+        async def run():
+            b = Broadcaster()
+            alice_q = b.subscribe("alice")
+            bob_q   = b.subscribe("bob")
+            b.broadcast("alice", "for alice only")
+            # alice gets her message
+            msg = await asyncio.wait_for(alice_q.get(), timeout=1.0)
+            assert msg == "for alice only"
+            # bob's queue stays empty
+            assert bob_q.empty()
+            b.unsubscribe("alice", alice_q)
+            b.unsubscribe("bob",   bob_q)
+        asyncio.run(run())
+
+    def test_unsubscribe_removes_queue(self):
+        """After unsubscribe, further broadcasts are not delivered to that queue."""
+        async def run():
+            b = Broadcaster()
+            q = b.subscribe("alice")
+            b.unsubscribe("alice", q)
+            b.broadcast("alice", "should not arrive")
+            assert q.empty()
+        asyncio.run(run())
+
+    def test_unsubscribe_twice_does_not_raise(self):
+        """Calling unsubscribe on an already-removed queue must not raise."""
+        async def run():
+            b = Broadcaster()
+            q = b.subscribe("alice")
+            b.unsubscribe("alice", q)
+            b.unsubscribe("alice", q)   # second call — must be silent
+        asyncio.run(run())
+
+    def test_post_message_triggers_sse_delivery(self, client):
+        """
+        Integration: POST /messages causes the message JSON to appear in the
+        broadcaster queue of the recipient — verified by subscribing directly
+        to the Broadcaster instance used by the app.
+        """
+        from server.dependencies import get_broadcaster
+
+        alice_token = register_and_login(client, "alice", "secret123")
+        register_and_login(client, "bob", "secret456")
+
+        # grab the live broadcaster instance from the app's DI container
+        broadcaster = app.dependency_overrides.get(get_broadcaster, get_broadcaster)()
+
+        async def run():
+            q = broadcaster.subscribe("bob")
+            try:
+                # send a message via the HTTP API
+                client.post(
+                    "/messages",
+                    json={"content": "sse test payload", "recipient": "bob"},
+                    headers=auth(alice_token),
+                )
+                payload = await asyncio.wait_for(q.get(), timeout=2.0)
+                import json
+                data = json.loads(payload)
+                assert data["content"] == "sse test payload"
+                assert data["sender"] == "alice"
+                assert data["recipient"] == "bob"
+            finally:
+                broadcaster.unsubscribe("bob", q)
+
+        asyncio.run(run())

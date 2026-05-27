@@ -69,16 +69,31 @@ CONCEPT 3 — FASTAPI DEPENDENCY INJECTION
     Authorization: Bearer eyJhbGc...
 """
 
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
+from dotenv import load_dotenv
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+load_dotenv()
 
-SECRET_KEY = "change-this-to-a-long-random-string-in-production"
+
+def _load_secret() -> str:
+    secret = os.environ.get("JWT_SECRET", "")
+    if len(secret) < 32:
+        raise RuntimeError(
+            "JWT_SECRET environment variable is missing or too short. "
+            "Set at least a 32-character random string in your .env file. "
+            "Generate one with: python -c \"import os; print(os.urandom(64).hex())\""
+        )
+    return secret
+
+
+SECRET_KEY: str = _load_secret()
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
